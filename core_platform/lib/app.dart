@@ -1,65 +1,36 @@
 import 'package:flutter/material.dart';
-import 'config/base_config.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:core_platform/core_platform.dart';
 
+/// Simple white label application widget
 class WhiteLabelApp extends StatelessWidget {
-  final BaseConfig config;
-
-  const WhiteLabelApp({
-    super.key,
-    required this.config,
-  });
+  const WhiteLabelApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: config.appName,
-      theme: config.theme,
-      home: HomePage(config: config),
-    );
-  }
-}
+    return BlocBuilder<ClientCubit, dynamic>(
+      builder: (context, state) {
+        final config = context.clientConfig;
+        final colors = config.colorScheme;
 
-class HomePage extends StatelessWidget {
-  final BaseConfig config;
-
-  const HomePage({super.key, required this.config});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: config.primaryColor,
-        foregroundColor: Colors.white,
-        title: Text(config.appName),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.business,
-              size: 80,
-              color: config.primaryColor,
+        return MaterialApp(
+          title: config.appName,
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: colors.primary,
+              primary: colors.primary,
+              secondary: colors.secondary,
+              background: colors.background,
+              surface: colors.surface,
+              onSurface: colors.onSurface,
             ),
-            const SizedBox(height: 24),
-            Text(
-              config.customStrings['welcome_message'] ??
-              'Welcome to ${config.appName}',
-              style: Theme.of(context).textTheme.headlineSmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Client: ${config.clientId}',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            Text(
-              'Project: ${config.projectName}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
+            scaffoldBackgroundColor: colors.background,
+          ),
+          home: const HomePage(),
+        );
+      },
     );
   }
 }
