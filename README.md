@@ -1,6 +1,6 @@
 # Flutter White Label Template
 
-A simplified Flutter white-label template for creating multiple branded apps from a single codebase.
+A production-ready Flutter white-label template for creating multiple branded apps from a single codebase with automatic Firebase integration.
 
 ## Architecture
 
@@ -22,24 +22,45 @@ This template separates **core platform** from **client-specific branding**, all
     └── create_client.dart     # Automated client generation
 ```
 
+## Prerequisites
+
+Before using this template, ensure you have the following tools installed:
+
+### Required
+- **Flutter SDK** (3.0.0 or higher)
+- **Firebase CLI**: `npm install -g firebase-tools`
+- **Firebase Account**: Google account with Firebase access
+
+### Auto-installed by Script
+- **FlutterFire CLI**: Automatically activated if missing
+
+### Setup
+1. **Login to Firebase**: `firebase login`
+2. **Verify access**: `firebase projects:list`
+
 ## Quick Start
 
 ### 1. Generate a New Client
 
 ```bash
-# Create a new client
-dart tools/create_client.dart -c my_client -n "My App" -p com.company.myapp
+# Restaurant app (mobile only)
+dart tools/create_client.dart -c nyc_biz -n "NYC Restaurant" -p restaurant -f admin@example.com
 
-# With custom API
-dart tools/create_client.dart -c acme_corp -n "Acme App" -p com.acme.app -a https://api.acme.com
+# Food delivery with web support
+dart tools/create_client.dart -c chicago_eats -n "Chicago Food Delivery" -p food_delivery -f admin@example.com --web
+
+# Skip Firebase (development only)
+dart tools/create_client.dart -c test_app -n "Test App" -p restaurant --skip-firebase
+
+# Custom organization
+dart tools/create_client.dart -c acme_corp -n "Acme App" -p business -o com.acme -f dev@acme.com --web
 ```
 
 ### 2. Run the Generated Client
 
 ```bash
-cd clients/my_client
-flutter pub get
-flutter run
+cd clients/nyc_biz
+flutter run  # Dependencies auto-installed, Firebase configured
 ```
 
 ## Client Structure
@@ -126,9 +147,11 @@ The `core_platform` provides:
 ## Benefits
 
 - **3-Line Client Setup**: `main.dart` is just 3 lines
+- **Automatic Firebase Integration**: Analytics & Crashlytics ready out-of-the-box
 - **7-Color Theming**: Define 7 colors, get 25+ professionally related colors
 - **Zero Code Duplication**: All shared logic in core_platform
-- **Automatic Theming**: Colors automatically applied to all UI components
+- **Multi-Platform Support**: Android, iOS, and Web with single flag
+- **Production-Ready**: Enterprise-grade error handling and recovery
 - **Asset Management**: Organized asset schemes with fallbacks
 - **State Management**: Built-in BLoC pattern for client configuration
 - **Easy Scaling**: Add unlimited clients with single command
@@ -136,19 +159,61 @@ The `core_platform` provides:
 ## Client Generation Script
 
 The script automatically creates:
-- Complete Flutter project structure
-- All 5 customization files with proper imports
-- Asset directories and guidelines
-- Dependencies configured correctly
+- **Complete Flutter project** with proper structure
+- **Firebase project** with Analytics & Crashlytics
+- **All 5 customization files** with proper imports
+- **Dependencies configured** and installed
+- **Asset directories** with guidelines
+- **Platform support** (Android, iOS, optionally Web)
+- **Interactive confirmation** and progress indicators
 
 ### Script Options
 
-| Option | Description | Required |
-|--------|-------------|----------|
-| `-c, --client-id` | Client identifier (lowercase, underscores) | Yes |
-| `-n, --app-name` | Human readable app name | Yes |
-| `-p, --package-name` | Package name (com.company.app) | Yes |
-| `-a, --api-url` | API base URL | No |
+| Option | Description | Required | Default |
+|--------|-------------|----------|---------|
+| `-c, --client-id` | Client identifier (lowercase, underscores) | Yes | - |
+| `-n, --app-name` | Human readable app name | Yes | - |
+| `-p, --project-name` | Base project name (e.g., restaurant, food_delivery) | Yes | - |
+| `-f, --firebase-account` | Firebase account email (required for Firebase) | Yes* | - |
+| `-o, --org` | Organization domain | No | `com.example` |
+| `-w, --web` | Include web platform support | No | `false` |
+| `--skip-firebase` | Skip Firebase project creation | No | `false` |
+
+*Required unless `--skip-firebase` is used
+
+## Firebase Integration
+
+### Automatic Setup
+The script automatically:
+- **Creates Firebase projects** with unique IDs
+- **Configures Analytics & Crashlytics** for production tracking
+- **Sets up FlutterFire** with proper platform configuration
+- **Handles errors gracefully** with fallback options
+
+### Web Platform Support
+Add `--web` flag for Progressive Web App support:
+```bash
+dart tools/create_client.dart -c my_app -n "My App" -p business -f admin@example.com --web
+```
+
+### Development Mode
+Skip Firebase for development/testing:
+```bash
+dart tools/create_client.dart -c test_app -n "Test App" -p business --skip-firebase
+```
+
+## Error Handling & Recovery
+
+### Smart Retry Logic
+- **Firebase project creation**: Automatic retries with progress indicators
+- **FlutterFire configuration**: Handles propagation delays
+- **Graceful fallbacks**: Continues without Firebase if setup fails
+
+### Recovery Options
+If Firebase setup fails:
+1. **Continue without Firebase**: Creates placeholder configurations
+2. **Manual setup instructions**: Provides exact commands for manual configuration
+3. **Validation checks**: Ensures all prerequisites before project creation
 
 ## Advanced Features
 
@@ -173,4 +238,4 @@ MIT License - feel free to use for commercial projects.
 
 ---
 
-**Ready to scale? Generate your first client and see the magic!** ✨
+**Ready to scale? Generate your first client with automatic Firebase integration!**
