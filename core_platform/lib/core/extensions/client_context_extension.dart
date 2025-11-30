@@ -1,12 +1,6 @@
+import 'package:core_platform/core/core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
-import '../config/base_config.dart';
-import '../config/client_asset_scheme.dart';
-import '../config/client_color_scheme.dart';
-import '../config/client_translation_scheme.dart';
-import '../cubits/client/client_cubit.dart';
-import '../cubits/client/client_state.dart';
 
 /// Extension to provide clean access to client data throughout the app
 extension ClientContext on BuildContext {
