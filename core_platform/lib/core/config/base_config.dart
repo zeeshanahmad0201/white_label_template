@@ -2,6 +2,8 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'client_asset_scheme.dart';
 import 'client_color_scheme.dart';
+import 'client_design_scheme.dart';
+import 'client_theme_scheme.dart';
 import 'client_translation_scheme.dart';
 
 /// Base configuration for white label clients
@@ -65,11 +67,11 @@ abstract class BaseConfig {
   /// Client-specific translation overrides for branding (optional)
   ClientTranslationScheme get translationScheme => const DefaultClientTranslationScheme();
 
-  /// Client-specific theme customizations (optional)
-  String? get fontFamily => null;
+  /// Client-specific theme scheme for complete theme customization (optional)
+  ClientThemeScheme get themeScheme => DefaultClientThemeScheme();
 
-  /// Whether to use Material 3 design system (optional)
-  bool get useMaterial3 => true;
+  /// Client-specific design scheme for responsive sizing (optional)
+  ClientDesignScheme get designScheme => DefaultClientDesignScheme();
 
   // ============================================================================
   // FEATURE FLAGS (optional)

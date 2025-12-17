@@ -40,6 +40,25 @@ abstract class ClientColorScheme {
   Color get success;
 
   // ============================================================================
+  // DARK MODE COLORS (Optional - set ALL or NONE)
+  // ============================================================================
+
+  /// Dark mode background color
+  /// If null, dark mode will not be available for this client
+  Color? get backgroundDark => null;
+
+  /// Dark mode surface color
+  /// Required if backgroundDark is provided
+  Color? get surfaceDark => null;
+
+  /// Dark mode content color on surfaces
+  /// Required if backgroundDark is provided
+  Color? get onSurfaceDark => null;
+
+  /// Whether this client supports dark mode
+  bool get supportsDarkMode => backgroundDark != null && surfaceDark != null && onSurfaceDark != null;
+
+  // ============================================================================
   // OPTIONAL CUSTOMIZATIONS
   // ============================================================================
 
@@ -72,7 +91,16 @@ abstract class ClientColorScheme {
   /// Whether this is a dark theme (computed from background brightness)
   bool get isDark => ThemeData.estimateBrightnessForColor(background) == Brightness.dark;
 
-  /// On-primary color (computed for optimal contrast)
+  /// On-primary color (customizable, defaults to optimal contrast)
+  ///
+  /// Override this to specify exactly what color should appear on primary backgrounds.
+  /// Common choices: Colors.white, Colors.black, or your brand's contrast color.
+  ///
+  /// Example:
+  /// ```dart
+  /// @override
+  /// Color get onPrimary => Colors.white; // Force white text on primary
+  /// ```
   Color get onPrimary => _getContrastColor(primary);
 
   /// On-error color (computed for optimal contrast)
