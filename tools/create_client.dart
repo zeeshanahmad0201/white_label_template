@@ -7,10 +7,11 @@ import 'package:args/args.dart';
 
 Future<void> main(List<String> args) async {
   final parser = ArgParser()
-    ..addOption('client-id', abbr: 'c', help: 'Client identifier (lowercase, underscores)', mandatory: true)
+    ..addOption('client-id', abbr: 'c', help: 'Client identifier (letters, numbers, underscores)', mandatory: true)
     ..addOption('app-name', abbr: 'n', help: 'Human readable app name', mandatory: true)
     ..addOption('project-name', abbr: 'p', help: 'Base project name (e.g., business_directory, food_delivery)', mandatory: true)
     ..addOption('firebase-account', abbr: 'f', help: 'Firebase account email (required for Firebase projects)')
+    ..addOption('firebase-project-id', help: 'Existing Firebase project ID to use (shared Firebase mode)')
     ..addOption('org', abbr: 'o', help: 'Organization domain', defaultsTo: 'com.example')
     ..addFlag('web', abbr: 'w', help: 'Include web platform support')
     ..addFlag('skip-firebase', help: 'Skip Firebase project creation and configuration')
@@ -28,21 +29,29 @@ Future<void> main(List<String> args) async {
     final appName = results['app-name'] as String;
     final projectName = results['project-name'] as String;
     final firebaseAccount = results['firebase-account'] as String?;
+    final firebaseProjectId = results['firebase-project-id'] as String?;
     final org = results['org'] as String;
     final includeWeb = results['web'] as bool;
     final skipFirebase = results['skip-firebase'] as bool;
 
-    // Validate Firebase account requirement
-    if (!skipFirebase && (firebaseAccount == null || firebaseAccount.isEmpty)) {
-      print('Error: --firebase-account is required when Firebase is enabled');
-      print('Use --skip-firebase if you don\'t want Firebase setup');
-      print('Example: dart tools/create_client.dart -c myapp -n "My App" -p restaurant -f example@example.app');
-      exit(1);
+    // Validate Firebase requirements
+    if (!skipFirebase) {
+      if (firebaseAccount == null || firebaseAccount.isEmpty) {
+        print('Error: --firebase-account is required when Firebase is enabled');
+        print('Use --skip-firebase if you don\'t want Firebase setup');
+        print('Example: dart tools/create_client.dart -c myapp -n "My App" -p restaurant -f example@example.app');
+        exit(1);
+      }
+
+      // Check if both firebase-project-id and skip-firebase are specified
+      if (firebaseProjectId != null && firebaseProjectId.isNotEmpty) {
+        print('Using existing Firebase project: $firebaseProjectId (shared mode)');
+      }
     }
 
     // Validate inputs
-    if (!RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(clientId)) {
-      print('Error: client-id must be lowercase letters, numbers, and underscores only');
+    if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9_]*$').hasMatch(clientId)) {
+      print('Error: client-id must be letters, numbers, and underscores only');
       exit(1);
     }
 
@@ -57,7 +66,7 @@ Future<void> main(List<String> args) async {
       exit(1);
     }
 
-    await _createClient(clientId, appName, projectName, org, includeWeb, skipFirebase, firebaseAccount);
+    await _createClient(clientId, appName, projectName, org, includeWeb, skipFirebase, firebaseAccount, firebaseProjectId);
 
   } catch (e) {
     print('Error: $e\n');
@@ -78,27 +87,36 @@ void _showUsage(ArgParser parser) {
   print('  # Food delivery with web support');
   print('  dart tools/create_client.dart -c chicago_eats -n "Chicago Food Delivery" -p food_delivery -f admin@example.com --web');
   print('');
-  print('  # Hotel booking for different organization');
-  print('  dart tools/create_client.dart -c miami_hotels -n "Miami Hotels" -p hotel_booking -f admin@company.com');
+  print('  # Shared Firebase project (recommended for multi-tenant)');
+  print('  dart tools/create_client.dart -c miami_hotels -n "Miami Hotels" -p hotel_booking -f admin@example.com --firebase-project-id myproject-production');
   print('');
-  print('  # Skip Firebase entirely (development)');
+  print('  # Development/testing without Firebase');
   print('  dart tools/create_client.dart -c test_app -n "Test App" -p restaurant --skip-firebase');
   print('');
-  print('  # Custom organization with multiple accounts');
-  print('  dart tools/create_client.dart -c acme_corp -n "Acme App" -p business -o com.acme -f dev@acme.com --web');
+  print('  # Custom organization with shared Firebase');
+  print('  dart tools/create_client.dart -c acme_corp -n "Acme App" -p business -o com.acme -f dev@acme.com --firebase-project-id acme-production --web');
   print('');
   print('Generated package: {org}.{project-name}.{client-id}');
   print('Generated location: clients/{client-id}/');
-  print('Firebase project: {project-name}-{client-id}');
+  print('Firebase project: {project-name}-{client-id} (new) OR existing project (shared mode)');
 }
 
-Future<void> _createClient(String clientId, String appName, String projectName, String org, bool includeWeb, bool skipFirebase, String? firebaseAccount) async {
-  final packageName = '$org.$projectName.$clientId';
-  final flutterProjectName = '${projectName}_$clientId';
+Future<void> _createClient(String clientId, String appName, String projectName, String org, bool includeWeb, bool skipFirebase, String? firebaseAccount, String? existingFirebaseProjectId) async {
+  // Use lowercase for technical identifiers (package name, flutter project, firebase)
+  // Keep original clientId for folder name and display purposes
+  final clientIdLower = clientId.toLowerCase();
+  final packageName = '$org.$projectName.$clientIdLower';
+  final flutterProjectName = '${projectName}_$clientIdLower';
   final apiUrl = 'https://api.example.com/$projectName';
-  // Add timestamp to make project ID unique
-  final timestamp = DateTime.now().millisecondsSinceEpoch.toString().substring(8); // Last 5 digits
-  final firebaseProjectId = '${projectName.replaceAll('_', '-')}-$clientId-$timestamp';
+
+  // Use existing project ID or generate new one (must be lowercase)
+  final firebaseProjectId = existingFirebaseProjectId ?? () {
+    // Add timestamp to make project ID unique
+    final timestamp = DateTime.now().millisecondsSinceEpoch.toString().substring(8); // Last 5 digits
+    return '${projectName.replaceAll('_', '-')}-$clientIdLower-$timestamp';
+  }();
+
+  final isSharedFirebase = existingFirebaseProjectId != null;
 
   print('Creating white-label client...');
   print('├─ Client ID: $clientId');
@@ -109,7 +127,13 @@ Future<void> _createClient(String clientId, String appName, String projectName, 
   if (skipFirebase) {
     print('├─ Firebase: DISABLED');
   } else {
-    print('├─ Firebase: ENABLED (Analytics & Crashlytics)');
+    if (isSharedFirebase) {
+      print('├─ Firebase: SHARED PROJECT MODE');
+      print('├─ Firebase Project: $firebaseProjectId (existing)');
+    } else {
+      print('├─ Firebase: NEW PROJECT MODE');
+      print('├─ Firebase Project: $firebaseProjectId (will create)');
+    }
     print('├─ Firebase Account: $firebaseAccount');
   }
   print('└─ Flutter Project: $flutterProjectName\n');
@@ -148,11 +172,17 @@ Future<void> _createClient(String clientId, String appName, String projectName, 
       print('Validating Firebase prerequisites...');
       _checkFirebasePrerequisites(firebaseAccount);
 
-      print('Creating Firebase project: $firebaseProjectId');
-      await _createFirebaseProject(firebaseProjectId, appName, firebaseAccount);
-
-      firebaseSetupSucceeded = true;
-      print('Firebase project created successfully');
+      if (isSharedFirebase) {
+        print('Validating existing Firebase project: $firebaseProjectId');
+        await _validateExistingFirebaseProject(firebaseProjectId, firebaseAccount);
+        firebaseSetupSucceeded = true;
+        print('Existing Firebase project validated');
+      } else {
+        print('Creating Firebase project: $firebaseProjectId');
+        await _createFirebaseProject(firebaseProjectId, appName, firebaseAccount);
+        firebaseSetupSucceeded = true;
+        print('Firebase project created successfully');
+      }
     } catch (e) {
       print('Firebase setup failed: $e');
       print('');
@@ -197,9 +227,38 @@ Future<void> _createClient(String clientId, String appName, String projectName, 
       print('Waiting for Firebase project to propagate...');
       await Future.delayed(Duration(seconds: 5));
 
+      // Create client-specific web app FIRST (before hosting site)
+      // FlutterFire reuses existing web apps, so we must create our own
+      String? webAppId;
+      if (includeWeb) {
+        webAppId = await _createWebApp(clientId, firebaseProjectId, firebaseAccount);
+      }
+
+      // Create hosting site for web (linked to web app if available)
+      String? hostingSiteId;
+      if (includeWeb) {
+        hostingSiteId = await _createHostingSite(clientIdLower, firebaseProjectId, firebaseAccount, webAppId);
+      }
+
       print('Configuring FlutterFire...');
       await _configureFlutterFireWithRetry(clientDir, firebaseProjectId, platforms, firebaseAccount);
       print('Firebase integration completed');
+
+      // Update firebase.json with our new web app ID, then regenerate firebase_options.dart
+      if (includeWeb && webAppId != null) {
+        _updateFirebaseJsonWebApp(clientDir, webAppId);
+        print('Regenerating firebase_options.dart with new web app...');
+        await _configureFlutterFireWithRetry(clientDir, firebaseProjectId, platforms, firebaseAccount);
+        print('Web app config updated for $clientId');
+      }
+
+      // Update client's firebase.json with hosting config if web enabled
+      if (includeWeb && hostingSiteId != null) {
+        _createClientFirebaseJson(clientDir, hostingSiteId);
+      }
+
+      // Create .firebaserc for deployment
+      _createFirebaseRc(clientDir, firebaseProjectId);
     } catch (e) {
       print('Warning: FlutterFire configuration failed: $e');
       print('Firebase project exists, but client configuration failed.');
@@ -218,12 +277,22 @@ Future<void> _createClient(String clientId, String appName, String projectName, 
   _createClientAssetScheme(clientDir, clientId);
   _createMainDart(clientDir, clientId);
 
+  // Update web/index.html title if web is enabled
+  if (includeWeb) {
+    _updateWebIndexHtmlTitle(clientDir, appName);
+  }
+
   print('\nClient $clientId created successfully!');
   print('Location: clients/$clientId');
   print('Package: $packageName');
   if (!skipFirebase) {
-    print('Firebase Project: $firebaseProjectId');
-    print('Analytics & Crashlytics: READY');
+    if (isSharedFirebase) {
+      print('Firebase Project: $firebaseProjectId (shared)');
+      print('Analytics & Crashlytics: SHARED ACROSS CLIENTS');
+    } else {
+      print('Firebase Project: $firebaseProjectId (dedicated)');
+      print('Analytics & Crashlytics: READY');
+    }
   }
   print('\nNext steps:');
   print('   1. cd clients/$clientId');
@@ -234,29 +303,16 @@ Future<void> _createClient(String clientId, String appName, String projectName, 
   } else {
     print('   2. Customize color scheme and assets');
     print('   3. flutter run (analytics & crashlytics auto-enabled)');
+    if (isSharedFirebase) {
+      print('   Note: All clients share the same Firebase project data');
+    }
   }
 }
 
 void _addDependencies(Directory clientDir) {
-  print('Adding dependencies...');
+  print('Adding core_platform dependency...');
 
-  // Add core dependencies using flutter pub add
-  final addResult = Process.runSync('flutter', [
-    'pub', 'add',
-    '--directory', clientDir.path,
-    'flutter_bloc',
-    'equatable',
-    'firebase_core',
-    'firebase_analytics',
-    'firebase_crashlytics'
-  ]);
-
-  if (addResult.exitCode != 0) {
-    print('Failed to add dependencies. Ensure Flutter SDK is available: ${addResult.stderr}');
-    exit(1);
-  }
-
-  // Add local core_platform dependency (needs different approach)
+  // Add local core_platform dependency
   final pubspecFile = File('${clientDir.path}/pubspec.yaml');
   if (!pubspecFile.existsSync()) {
     print('Error: pubspec.yaml not found');
@@ -280,21 +336,39 @@ void _addDependencies(Directory clientDir) {
     }
   }
 
-  // Add assets section if not exists
-  if (!pubspecContent.contains('assets:')) {
-    final assetSection = '''
-  assets:
-    - assets/images/
-''';
+  // Re-read pubspec content after core_platform addition
+  pubspecContent = pubspecFile.readAsStringSync();
 
-    if (pubspecContent.contains('flutter:')) {
-      pubspecContent = pubspecFile.readAsStringSync(); // Re-read after core_platform addition
-      pubspecContent = pubspecContent.replaceFirst(
-          'flutter:\n  uses-material-design: true',
-          'flutter:\n  uses-material-design: true$assetSection'
-      );
-      pubspecFile.writeAsStringSync(pubspecContent);
+  // Add assets section if not exists (check for uncommented assets: line)
+  // Use regex to find "assets:" that is NOT preceded by # on the same line
+  final hasUncommentedAssets = RegExp(r'^\s*assets:', multiLine: true).hasMatch(pubspecContent);
+  if (!hasUncommentedAssets) {
+    // Try multiple patterns to find uses-material-design line
+    final patterns = [
+      RegExp(r'(uses-material-design:\s*true\n)'),
+      RegExp(r'(uses-material-design:\s*true\r\n)'),
+      RegExp(r'(uses-material-design:\s*true)'),
+    ];
+
+    bool replaced = false;
+    for (final pattern in patterns) {
+      if (pattern.hasMatch(pubspecContent)) {
+        pubspecContent = pubspecContent.replaceFirstMapped(
+          pattern,
+          (match) => '${match.group(1)?.trimRight() ?? 'uses-material-design: true'}\n  assets:\n    - assets/\n    - assets/images/\n',
+        );
+        pubspecFile.writeAsStringSync(pubspecContent);
+        replaced = true;
+        print('Assets section added to pubspec.yaml');
+        break;
+      }
     }
+
+    if (!replaced) {
+      print('Warning: Could not find uses-material-design line. Please add assets manually.');
+    }
+  } else {
+    print('Assets section already exists in pubspec.yaml');
   }
 
   // Run flutter pub get to ensure all dependencies are resolved
@@ -306,7 +380,7 @@ void _addDependencies(Directory clientDir) {
     print('Warning: Failed to run flutter pub get: ${pubGetResult.stderr}');
   }
 
-  print('Dependencies added');
+  print('Core platform dependency added');
 }
 
 void _createClientConfig(Directory clientDir, String clientId, String appName, String packageName, String apiUrl) {
@@ -409,12 +483,19 @@ class $className extends ClientAssetScheme {
 }
 ''');
 
-  // Create placeholder assets directory and files
-  final assetsDir = Directory('${clientDir.path}/assets/images');
-  assetsDir.createSync(recursive: true);
+  // Create assets directory structure
+  final assetsBaseDir = Directory('${clientDir.path}/assets');
+  final assetsImagesDir = Directory('${clientDir.path}/assets/images');
 
-  // Create asset README
-  File('${assetsDir.path}/README.md').writeAsStringSync('''
+  if (!assetsBaseDir.existsSync()) {
+    assetsBaseDir.createSync(recursive: true);
+  }
+  if (!assetsImagesDir.existsSync()) {
+    assetsImagesDir.createSync(recursive: true);
+  }
+
+  // Create asset README in images folder
+  File('${assetsImagesDir.path}/README.md').writeAsStringSync('''
 # Client Assets
 
 ## Required Assets:
@@ -426,6 +507,8 @@ class $className extends ClientAssetScheme {
 
 Add your client-specific assets here and update client_asset_scheme.dart accordingly.
 ''');
+
+  print('Assets directories created: assets/, assets/images/');
 }
 
 void _createMainDart(Directory clientDir, String clientId) {
@@ -482,6 +565,30 @@ void _checkFirebasePrerequisites(String requiredAccount) {
   }
 
   print('Firebase access verified for: $requiredAccount');
+}
+
+Future<void> _validateExistingFirebaseProject(String projectId, String firebaseAccount) async {
+  print('Checking if Firebase project exists: $projectId');
+
+  // List all projects and search for our project ID
+  final result = Process.runSync('firebase', [
+    'projects:list',
+    '--account', firebaseAccount
+  ]);
+
+  if (result.exitCode != 0) {
+    throw Exception('Failed to check Firebase projects: ${result.stderr}');
+  }
+
+  final output = result.stdout.toString();
+
+  // Check if the project ID appears in the output
+  // Firebase CLI output includes project ID in format: "projectId (displayName)"
+  if (!output.contains(projectId)) {
+    throw Exception('Firebase project "$projectId" not found or not accessible with account $firebaseAccount');
+  }
+
+  print('Firebase project "$projectId" exists and is accessible');
 }
 
 
@@ -652,4 +759,325 @@ String _toPascalCase(String text) {
   return text.split('_').map((word) =>
   word[0].toUpperCase() + word.substring(1).toLowerCase()
   ).join('');
+}
+
+/// Creates a new Firebase Hosting site for the client
+/// Optionally links it to a web app if webAppId is provided
+///
+/// Returns the site ID if successful, null otherwise
+Future<String?> _createHostingSite(String clientIdLower, String firebaseProjectId, String firebaseAccount, String? webAppId) async {
+  // Site ID must be lowercase and can contain hyphens
+  final siteId = '$firebaseProjectId-$clientIdLower';
+
+  print('Checking Firebase Hosting site: $siteId');
+
+  try {
+    // First check if site already exists by listing sites
+    final listResult = Process.runSync('firebase', [
+      'hosting:sites:list',
+      '--project', firebaseProjectId,
+      '--account', firebaseAccount,
+    ]);
+
+    if (listResult.exitCode == 0) {
+      final output = listResult.stdout.toString();
+      if (output.contains(siteId)) {
+        print('Hosting site already exists: $siteId');
+        print('URL: https://$siteId.web.app');
+        return siteId;
+      }
+    }
+
+    // Site doesn't exist, create it (with --app flag if webAppId available)
+    print('Creating Firebase Hosting site: $siteId');
+    final createArgs = [
+      'hosting:sites:create',
+      siteId,
+      '--project', firebaseProjectId,
+      '--account', firebaseAccount,
+    ];
+
+    // Add --app flag to link hosting site to web app
+    if (webAppId != null) {
+      createArgs.addAll(['--app', webAppId]);
+      print('Linking to web app: $webAppId');
+    }
+
+    final result = Process.runSync('firebase', createArgs);
+
+    if (result.exitCode == 0) {
+      print('Hosting site created: $siteId');
+      if (webAppId != null) {
+        print('Linked to web app: $webAppId');
+      }
+      print('URL: https://$siteId.web.app');
+      return siteId;
+    }
+
+    // Check if site already exists (in case race condition or list missed it)
+    final errorOutput = result.stderr.toString();
+    final stdOutput = result.stdout.toString();
+    if (errorOutput.contains('already exists') ||
+        errorOutput.contains('ALREADY_EXISTS') ||
+        stdOutput.contains('already exists')) {
+      print('Hosting site already exists: $siteId');
+      print('URL: https://$siteId.web.app');
+      return siteId;
+    }
+
+    // Even if creation "failed", the site might exist - try to use it
+    if (errorOutput.isEmpty && stdOutput.isEmpty) {
+      print('Hosting site may already exist, using: $siteId');
+      print('URL: https://$siteId.web.app');
+      return siteId;
+    }
+
+    print('Warning: Failed to create hosting site: $errorOutput');
+    return null;
+  } catch (e) {
+    print('Warning: Hosting site creation failed: $e');
+    return null;
+  }
+}
+
+/// Adds hosting configuration to client's firebase.json (merges with existing)
+void _createClientFirebaseJson(Directory clientDir, String hostingSiteId) {
+  print('Adding hosting config to client firebase.json...');
+
+  final firebaseJsonFile = File('${clientDir.path}/firebase.json');
+
+  // Hosting config to add
+  final hostingConfig = {
+    'site': hostingSiteId,
+    'public': 'build/web',
+    'ignore': [
+      'firebase.json',
+      '**/.*',
+      '**/node_modules/**'
+    ],
+    'rewrites': [
+      {
+        'source': '**',
+        'destination': '/index.html'
+      }
+    ],
+    'headers': [
+      {
+        'source': '**/*.@(js|css)',
+        'headers': [
+          {
+            'key': 'Cache-Control',
+            'value': 'max-age=31536000'
+          }
+        ]
+      },
+      {
+        'source': '**/*.@(jpg|jpeg|gif|png|svg|webp|ico)',
+        'headers': [
+          {
+            'key': 'Cache-Control',
+            'value': 'max-age=31536000'
+          }
+        ]
+      }
+    ]
+  };
+
+  Map<String, dynamic> existingConfig = {};
+
+  // Read existing firebase.json if it exists
+  if (firebaseJsonFile.existsSync()) {
+    try {
+      final content = firebaseJsonFile.readAsStringSync();
+      existingConfig = json.decode(content) as Map<String, dynamic>;
+      print('Merging with existing firebase.json');
+    } catch (e) {
+      print('Warning: Could not parse existing firebase.json, creating new one');
+    }
+  }
+
+  // Add hosting config
+  existingConfig['hosting'] = hostingConfig;
+
+  // Write merged config with pretty formatting
+  final encoder = JsonEncoder.withIndent('  ');
+  firebaseJsonFile.writeAsStringSync(encoder.convert(existingConfig));
+
+  print('Hosting config added to firebase.json');
+  print('Deploy with: cd ${clientDir.path} && flutter build web && firebase deploy --only hosting');
+}
+
+/// Updates web/index.html with the app title only (no Firebase SDK scripts needed)
+void _updateWebIndexHtmlTitle(Directory clientDir, String appName) {
+  print('Updating web/index.html title...');
+
+  final indexFile = File('${clientDir.path}/web/index.html');
+  if (!indexFile.existsSync()) {
+    print('Warning: web/index.html not found.');
+    return;
+  }
+
+  String indexContent = indexFile.readAsStringSync();
+
+  // Update the title
+  indexContent = indexContent.replaceFirst(
+    RegExp(r'<title>.*?</title>'),
+    '<title>$appName</title>',
+  );
+
+  // Update apple-mobile-web-app-title
+  indexContent = indexContent.replaceFirst(
+    RegExp(r'<meta name="apple-mobile-web-app-title" content=".*?">'),
+    '<meta name="apple-mobile-web-app-title" content="$appName">',
+  );
+
+  indexFile.writeAsStringSync(indexContent);
+  print('Web title updated to: $appName');
+}
+
+/// Updates firebase.json with the new web app ID in the dart configurations
+/// This allows FlutterFire to regenerate firebase_options.dart with the correct web app
+void _updateFirebaseJsonWebApp(Directory clientDir, String webAppId) {
+  print('Updating firebase.json with new web app ID...');
+
+  final firebaseJsonFile = File('${clientDir.path}/firebase.json');
+  if (!firebaseJsonFile.existsSync()) {
+    print('Warning: firebase.json not found');
+    return;
+  }
+
+  try {
+    final content = firebaseJsonFile.readAsStringSync();
+    final config = json.decode(content) as Map<String, dynamic>;
+
+    // Navigate to flutter.platforms.dart["lib/firebase_options.dart"].configurations.web
+    if (config.containsKey('flutter')) {
+      final flutter = config['flutter'] as Map<String, dynamic>;
+      if (flutter.containsKey('platforms')) {
+        final platforms = flutter['platforms'] as Map<String, dynamic>;
+        if (platforms.containsKey('dart')) {
+          final dart = platforms['dart'] as Map<String, dynamic>;
+          if (dart.containsKey('lib/firebase_options.dart')) {
+            final firebaseOptions = dart['lib/firebase_options.dart'] as Map<String, dynamic>;
+            if (firebaseOptions.containsKey('configurations')) {
+              final configurations = firebaseOptions['configurations'] as Map<String, dynamic>;
+              configurations['web'] = webAppId;
+
+              // Write back the updated config
+              final encoder = JsonEncoder.withIndent('  ');
+              firebaseJsonFile.writeAsStringSync(encoder.convert(config));
+              print('Web app ID updated in firebase.json: $webAppId');
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    print('Warning: Could not find web configuration path in firebase.json');
+  } catch (e) {
+    print('Warning: Failed to update firebase.json: $e');
+  }
+}
+
+/// Creates a new Firebase Web App for the client
+/// Returns the web app ID if successful, null otherwise
+Future<String?> _createWebApp(String clientId, String firebaseProjectId, String firebaseAccount) async {
+  final appName = '$clientId';
+
+  print('Creating Firebase Web App: $appName');
+
+  try {
+    // Create the web app
+    final createResult = Process.runSync('firebase', [
+      'apps:create',
+      'WEB',
+      appName,
+      '--project', firebaseProjectId,
+      '--account', firebaseAccount,
+    ]);
+
+    String? appId;
+
+    if (createResult.exitCode == 0) {
+      // Extract app ID from output
+      final output = createResult.stdout.toString();
+      // Look for pattern like "App ID: 1:123456789:web:abcdef"
+      final appIdMatch = RegExp(r'App ID:\s*(1:\d+:web:[a-f0-9]+)').firstMatch(output);
+      if (appIdMatch != null) {
+        appId = appIdMatch.group(1);
+      }
+      print('Web app created: $appName');
+    } else {
+      final errorOutput = createResult.stderr.toString();
+      // Check if app already exists
+      if (errorOutput.contains('already exists') || errorOutput.contains('ALREADY_EXISTS')) {
+        print('Web app may already exist, searching for it...');
+        // List apps to find our app
+        appId = await _findWebAppId(clientId, firebaseProjectId, firebaseAccount);
+      } else {
+        print('Warning: Failed to create web app: $errorOutput');
+        return null;
+      }
+    }
+
+    if (appId == null) {
+      print('Warning: Could not get web app ID');
+      return null;
+    }
+
+    print('Web App ID: $appId');
+    return appId;
+  } catch (e) {
+    print('Warning: Web app creation failed: $e');
+    return null;
+  }
+}
+
+/// Creates .firebaserc file for Firebase CLI deployment
+void _createFirebaseRc(Directory clientDir, String firebaseProjectId) {
+  print('Creating .firebaserc...');
+
+  final firebaseRcFile = File('${clientDir.path}/.firebaserc');
+
+  final config = {
+    'projects': {
+      'default': firebaseProjectId,
+    },
+  };
+
+  final encoder = JsonEncoder.withIndent('  ');
+  firebaseRcFile.writeAsStringSync(encoder.convert(config));
+
+  print('.firebaserc created with project: $firebaseProjectId');
+}
+
+/// Finds an existing web app ID by searching through apps
+Future<String?> _findWebAppId(String clientId, String firebaseProjectId, String firebaseAccount) async {
+  final listResult = Process.runSync('firebase', [
+    'apps:list',
+    'WEB',
+    '--project', firebaseProjectId,
+    '--account', firebaseAccount,
+  ]);
+
+  if (listResult.exitCode != 0) {
+    return null;
+  }
+
+  final output = listResult.stdout.toString();
+  final lines = output.split('\n');
+
+  // Look for a line containing our client ID
+  for (final line in lines) {
+    if (line.toLowerCase().contains(clientId.toLowerCase())) {
+      // Extract app ID from the line
+      final appIdMatch = RegExp(r'(1:\d+:web:[a-f0-9]+)').firstMatch(line);
+      if (appIdMatch != null) {
+        return appIdMatch.group(1);
+      }
+    }
+  }
+
+  return null;
 }
